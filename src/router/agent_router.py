@@ -286,11 +286,9 @@ class LICPolicyAgentRouter:
         if hasattr(self.embedder, "_genai_client") and self.embedder._genai_client:
             try:
                 system_instruction = (
-                    "You are an expert AI LIC Policy Advisor. Answer the user's question directly, concisely, and accurately "
-                    "using ONLY the provided official LIC policy context documents below. "
-                    "Do NOT copy large blocks of raw text, rider terms, or fee tables unless directly requested. "
-                    "Format key facts as clear bullet points or markdown tables. "
-                    "If the answer is not contained in the context, state clearly that the provided policy documents do not specify this detail."
+                    "You are an expert AI LIC Policy Advisor. Provide a clear, direct, single-sentence answer to the user's question first. "
+                    "Follow with 2-3 brief bullet points highlighting key parameters (e.g., Minimum Age, Maximum Age, Sum Assured) if applicable. "
+                    "Do NOT copy large blocks of raw text, rider terms, or fee tables. Keep the response concise and readable."
                 )
                 prompt = f"User Question: {query}\n\nRetrieved Official Document Context:\n{context_str}\n\nPlease synthesize a clear, direct, and well-formatted answer:"
                 
