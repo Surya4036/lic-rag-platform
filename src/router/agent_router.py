@@ -1,7 +1,10 @@
 import os
 import re
+import logging
 from enum import Enum
 from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger("agent_router")
 
 from src.embeddings.embedder import PolicyEmbedder
 from src.vectorstore.store import VectorStore
@@ -306,8 +309,19 @@ class LICPolicyAgentRouter:
                     system_instruction=system_instruction
                 )
 
+                models_to_try = [
+                    "gemini-1.5-flash-002",
+                    "gemini-1.5-flash-001",
+                    "gemini-1.5-pro-002",
+                    "gemini-1.5-pro-001",
+                    "gemini-2.0-flash-001",
+                    "gemini-2.0-flash",
+                    "gemini-1.5-flash",
+                    "gemini-1.5-pro"
+                ]
+
                 for client in clients_to_try:
-                    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro"]:
+                    for model_name in models_to_try:
                         try:
                             response = client.models.generate_content(
                                 model=model_name,
@@ -323,23 +337,40 @@ class LICPolicyAgentRouter:
             except Exception as e:
                 logger.error(f"Gemini outer error: {type(e).__name__}: {e}")
 
-        # 2. Intelligent Offline Fallback Extraction
-        extracted_points = []
+        # 2. Intelligent Concise Offline Fallback Extraction
+        extracted_lines = []
+        ignore_words = {"what", "is", "the", "for", "lic", "plan", "policy", "does", "which", "how", "much", "many"}
+        key_terms = [q.strip().lower() for q in query.split() if len(q.strip()) > 2 and q.lower() not in ignore_words]
+        
         for res in retrieved_chunks:
             c = res["chunk"] if "chunk" in res else res
             pname = c.get("policy_name", "LIC Policy")
-            hdr = c.get("header_path", "General")
             content = c.get("content", "").strip()
-            
             if not content:
                 continue
-                
-            clean_section_text = self._format_clean_markdown(content)
-            extracted_points.append(f"### **{pname}** (*{hdr}*)\n{clean_section_text}")
+            
+            clean_lines = [line.strip() for line in content.split("\n") if line.strip()]
+            matching_lines = []
+            for line in clean_lines:
+                line_lower = line.lower()
+                if any(term in line_lower for term in key_terms):
+                    clean_line = re.sub(r"^[\-\*\:\#\d\.\s]+", "", line).strip()
+                    if clean_line and clean_line not in matching_lines:
+                        matching_lines.append(clean_line)
+            
+            if matching_lines:
+                extracted_lines.append(f"- **{pname}**: " + "; ".join(matching_lines[:3]))
         
-        if extracted_points:
-            return "Based on official LIC policy documents, here are the relevant details:\n\n" + "\n\n---\n\n".join(extracted_points)
+        if extracted_lines:
+            return "Based on official LIC policy documents:\n\n" + "\n".join(extracted_lines)
         
-        return f"Based on official LIC policy documents for '{query}':\n\nNo relevant details found."
+        # Default concise summary if no specific keyword match
+        if retrieved_chunks:
+            top_chunk = retrieved_chunks[0].get("chunk", retrieved_chunks[0])
+            pname = top_chunk.get("policy_name", "LIC Policy")
+            first_text = self._format_clean_markdown(top_chunk.get("content", "").strip()).split("\n")[0]
+            return f"**{pname}**: {first_text}"
+
+        return f"Based on official LIC policy documents for '{query}': No relevant details found."
 
 
