@@ -7,15 +7,3 @@ output "parsed_md_bucket" {
   description = "GCS bucket name for parsed Markdown"
   value       = google_storage_bucket.parsed_md.name
 }
-
-output "database_public_ip" {
-  description = "Public IP address of Cloud SQL instance"
-  value       = google_sql_database_instance.postgres.public_ip_address
-}
-
-output "database_name" {
-  description = "Database name"
-  value       = google_sql_database.database.name
-}
-
-
