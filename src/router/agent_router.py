@@ -188,7 +188,8 @@ class LICPolicyAgentRouter:
                 f"- **Vested Simple Reversionary Bonus:** ₹{b['total_reversionary_bonus']:,.2f}\n"
                 f"- **Final Additional Bonus (FAB):** ₹{b['final_additional_bonus']:,.2f}\n\n"
                 f"**Total Estimated Maturity Benefit:** **₹{calc_res['total_estimated_maturity_benefit']:,.2f}**\n\n"
-                f"*Parameters used: Age {calc_res['entry_age']}, Term {calc_res['term_years']} yrs, Sum Assured ₹{calc_res['basic_sum_assured']:,.0f}."
+                f"*Parameters used: Age {calc_res['entry_age']}, Term {calc_res['term_years']} yrs, Sum Assured ₹{calc_res['basic_sum_assured']:,.0f}.*\n\n"
+                f"*(⚠️ Note: Payout figures are illustrative estimates based on bonus tables for planning purposes.)*"
             )
             return {
                 "intent": intent.value,
@@ -328,7 +329,7 @@ class LICPolicyAgentRouter:
 
         context_str = "\n\n---\n\n".join(context_blocks)
 
-        # 1. Try Gemini LLM synthesis across available clients and region endpoints
+        # 1. Fast Gemini LLM synthesis using primary client
         try:
             from google import genai
             from google.genai import types
@@ -341,41 +342,17 @@ class LICPolicyAgentRouter:
             prompt = f"User Question: {query}\n\nRetrieved Official Document Context:\n{context_str}\n\nPlease synthesize a clear, direct, and well-formatted answer:"
             genai_config = types.GenerateContentConfig(system_instruction=system_instruction)
 
-            clients_to_try = []
-
-            # A. Check for explicit API key first (Google AI Studio)
             api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or getattr(self.embedder, "api_key", None)
+            client = None
             if api_key:
-                try:
-                    clients_to_try.append(genai.Client(api_key=api_key))
-                except Exception as e:
-                    logger.warning(f"Failed to create AI Studio client with API key: {e}")
+                client = genai.Client(api_key=api_key)
+            elif hasattr(self.embedder, "_genai_client") and self.embedder._genai_client:
+                client = self.embedder._genai_client
+            elif os.environ.get("GCP_PROJECT_ID"):
+                client = genai.Client(vertexai=True, project=os.environ.get("GCP_PROJECT_ID"), location="us-central1")
 
-            # B. Check embedder client
-            if hasattr(self.embedder, "_genai_client") and self.embedder._genai_client:
-                clients_to_try.append(self.embedder._genai_client)
-
-            # C. Check GCP Project Vertex AI clients across regions
-            project_id = os.environ.get("GCP_PROJECT_ID") or getattr(self.embedder, "gcp_project", None)
-            if project_id:
-                for location in ["us-central1", "us-east4", "global"]:
-                    try:
-                        clients_to_try.append(genai.Client(vertexai=True, project=project_id, location=location))
-                    except Exception as e:
-                        logger.warning(f"Failed to create Vertex AI client at {location}: {e}")
-
-            models_to_try = [
-                "gemini-1.5-flash-001",
-                "gemini-1.5-flash-002",
-                "gemini-1.5-flash",
-                "gemini-2.0-flash-001",
-                "gemini-2.0-flash",
-                "gemini-1.5-pro-001",
-                "gemini-1.5-pro"
-            ]
-
-            for client in clients_to_try:
-                for model_name in models_to_try:
+            if client:
+                for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
                     try:
                         response = client.models.generate_content(
                             model=model_name,
@@ -386,10 +363,10 @@ class LICPolicyAgentRouter:
                             logger.info(f"Successfully generated answer with model {model_name}")
                             return response.text.strip()
                     except Exception as e:
-                        logger.error(f"Gemini LLM error with model {model_name}: {type(e).__name__}: {e}")
+                        logger.warning(f"Gemini LLM error with model {model_name}: {e}")
                         continue
         except Exception as e:
-            logger.error(f"Gemini outer synthesis error: {type(e).__name__}: {e}")
+            logger.error(f"Gemini synthesis error: {e}")
 
         # 2. Intelligent Concise Single-Line Extraction Fallback
         for res in retrieved_chunks:

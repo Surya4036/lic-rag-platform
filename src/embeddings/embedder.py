@@ -1,18 +1,22 @@
 import os
 import re
 import hashlib
+import logging
 import numpy as np
 from typing import List, Optional
+
+logger = logging.getLogger("embedder")
 
 class PolicyEmbedder:
     """
     Embedding pipeline provider for LIC Policy documents.
-    Supports GCP Vertex AI / Gemini API (text-embedding-004) when API key is available,
-    and a local deterministic normalized feature vectorizer fallback for offline development.
+    Supports GCP Vertex AI / Gemini API (text-embedding-004) when API key or ADC is available,
+    and a local L2-normalized feature vectorizer for offline development.
     """
     def __init__(self, dimension: int = 768, force_local: bool = False):
         self.dimension = dimension
         self.force_local = force_local
+        self.model_name = "text-embedding-004"
         self.api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         self.gcp_project = os.environ.get("GCP_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT")
         self.gcp_location = os.environ.get("VERTEX_AI_LOCATION", "us-central1")
@@ -24,9 +28,10 @@ class PolicyEmbedder:
                 if self.api_key:
                     self._genai_client = genai.Client(api_key=self.api_key)
                 elif self.gcp_project:
-                    # Vertex AI mode using Application Default Credentials (ADC) in us-central1
+                    # Vertex AI mode using Application Default Credentials (ADC)
                     self._genai_client = genai.Client(vertexai=True, project=self.gcp_project, location=self.gcp_location)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Failed to initialize GenAI embedding client: {e}")
                 self._genai_client = None
 
     def _local_embedding(self, text: str) -> List[float]:
@@ -53,7 +58,6 @@ class PolicyEmbedder:
         if norm > 0:
             vec = vec / norm
         else:
-            # Fallback uniform unit vector
             vec = np.ones(self.dimension, dtype=np.float32) / np.sqrt(self.dimension)
 
         return vec.tolist()
@@ -65,16 +69,19 @@ class PolicyEmbedder:
 
         if self._genai_client and not self.force_local:
             try:
-                # Vertex AI / Gemini Text Embeddings API
                 response = self._genai_client.models.embed_content(
-                    model="text-embedding-004",
+                    model=self.model_name,
                     contents=texts
                 )
                 if hasattr(response, "embeddings"):
                     return [e.values for e in response.embeddings]
             except Exception as e:
-                # Log or fallback to local embedder if API fails
-                pass
+                logger.error(f"Embedding API error with model {self.model_name}: {e}")
+                if os.environ.get("ENVIRONMENT") == "prod":
+                    raise RuntimeError(f"Production embedding generation failed with API model {self.model_name}: {e}")
+
+        if os.environ.get("ENVIRONMENT") == "prod" and not self.force_local:
+            logger.error("Attempting to use offline fallback embedding in production mode!")
 
         # Fallback local deterministic embedding
         return [self._local_embedding(t) for t in texts]

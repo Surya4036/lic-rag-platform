@@ -20,10 +20,12 @@ st.title("🛡️ LIC Policy Advisor & Comparison Platform")
 st.caption("Enterprise-Grade Agentic RAG Engine for LIC Insurance Policies")
 
 # Initialize Local Fallback Router if API is not reachable
+@st.cache_resource
 def get_local_router():
     return LICPolicyAgentRouter()
 
-local_router = get_local_router()
+def get_router():
+    return get_local_router()
 
 def query_backend(prompt: str) -> dict:
     """Send query to FastAPI backend server with local fallback."""
@@ -34,7 +36,7 @@ def query_backend(prompt: str) -> dict:
     except Exception as e:
         print("FastAPI query error:", e)
     # Fallback to direct python execution
-    return local_router.process_query(prompt)
+    return get_router().process_query(prompt)
 
 def calculate_backend(policy_name: str, sum_assured: float, term: int, age: int) -> dict:
     """Send payout calculation to FastAPI backend with local fallback."""
@@ -81,6 +83,7 @@ if st.sidebar.button("Calculate Payout"):
     st.sidebar.metric("Vested Reversionary Bonus", f"₹{b['total_reversionary_bonus']:,.0f}")
     st.sidebar.metric("Final Additional Bonus (FAB)", f"₹{b['final_additional_bonus']:,.0f}")
     st.sidebar.metric("Total Estimated Maturity", f"₹{calc_res['total_estimated_maturity_benefit']:,.0f}")
+    st.sidebar.caption("⚠️ *Payout figures are illustrative estimates for planning purposes.*")
 
 # Main Tabs
 tab1, tab2 = st.tabs(["💬 AI Advisor Chat", "📊 Policy Catalog & Comparison"])

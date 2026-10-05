@@ -1,7 +1,7 @@
 variable "project_id" {
   type        = string
   description = "GCP Project ID"
-  default     = "lic-rag-prod"
+  default     = "project-375bcd63-2dad-4e81-898"
 }
 
 variable "region" {
@@ -25,5 +25,5 @@ variable "billing_account_id" {
 variable "alert_email" {
   type        = string
   description = "Email address for budget alerts"
-  default     = "surya4036@gmail.com"
+  default     = "alerts@licrag.com"
 }

@@ -2,19 +2,24 @@ import os
 import re
 import math
 import json
+import logging
 import numpy as np
 from typing import List, Dict, Any, Optional
+
+logger = logging.getLogger("vectorstore")
 
 class VectorStore:
     """
     Hybrid Vector Store for LIC Policy Chunks with Dense Vector Similarity,
     BM25 Sparse Keyword Search, Reciprocal Rank Fusion (RRF), and Metadata Filtering.
     """
-    def __init__(self, k1: float = 1.5, b: float = 0.75):
+    def __init__(self, k1: float = 1.5, b: float = 0.75, embedder_model: str = "text-embedding-004", dimension: int = 768):
         self.chunks: List[Dict[str, Any]] = []
         self.embeddings: Optional[np.ndarray] = None
         self.k1 = k1
         self.b = b
+        self.embedder_model = embedder_model
+        self.dimension = dimension
         self.doc_tokens: List[List[str]] = []
         self.doc_lens: List[int] = []
         self.avg_doc_len: float = 0.0
@@ -75,7 +80,7 @@ class VectorStore:
         self._build_bm25_index()
 
     def bm25_search(self, query: str, top_k: int = 10, policy_uin_filter: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Performs BM25 Sparse Keyword Search."""
+        """Performs BM25 Sparse Keyword Search, filtering out zero-score non-matching chunks."""
         if not self.chunks:
             return []
 
@@ -112,7 +117,8 @@ class VectorStore:
         top_indices = np.argsort(scores)[::-1][:top_k]
         results = []
         for idx in top_indices:
-            if scores[idx] > 0 or not policy_uin_filter:
+            # Drop zero-score chunks to prevent polluting RRF fusion
+            if scores[idx] > 0.0:
                 results.append({"chunk": self.chunks[idx], "bm25_score": float(scores[idx]), "idx": int(idx)})
         return results
 
@@ -156,11 +162,11 @@ class VectorStore:
         query_embedding: List[float],
         top_k: int = 5,
         policy_uin_filter: Optional[str] = None,
-        rrf_k: int = 20
+        rrf_k: int = 60
     ) -> List[Dict[str, Any]]:
         """
         Hybrid Retrieval combining Dense Vector Similarity + BM25 Keyword Search
-        using Reciprocal Rank Fusion (RRF).
+        using Reciprocal Rank Fusion (RRF with equal 1:1 weights and rrf_k=60).
         """
         candidate_k = max(20, top_k * 5)
         dense_results = self.search(query_embedding, top_k=candidate_k, policy_uin_filter=policy_uin_filter)
@@ -168,15 +174,15 @@ class VectorStore:
 
         rrf_scores: Dict[int, float] = {}
 
-        # Dense ranks
+        # Dense ranks (weight = 1.0)
         for rank, res in enumerate(dense_results, 1):
             idx = res["idx"]
             rrf_scores[idx] = rrf_scores.get(idx, 0.0) + (1.0 / (rrf_k + rank))
 
-        # BM25 ranks (weighted higher for exact term precision)
+        # BM25 ranks (weight = 1.0)
         for rank, res in enumerate(bm25_results, 1):
             idx = res["idx"]
-            rrf_scores[idx] = rrf_scores.get(idx, 0.0) + 2.0 * (1.0 / (rrf_k + rank))
+            rrf_scores[idx] = rrf_scores.get(idx, 0.0) + (1.0 / (rrf_k + rank))
 
         sorted_indices = sorted(rrf_scores.keys(), key=lambda i: rrf_scores[i], reverse=True)[:top_k]
 
@@ -186,28 +192,42 @@ class VectorStore:
         } for idx in sorted_indices]
 
     def save(self, directory: str):
-        """Saves vector store index (metadata JSON + embeddings numpy array) to disk."""
+        """Saves vector store index (metadata JSON + embeddings numpy array) to disk with index metadata."""
         os.makedirs(directory, exist_ok=True)
         meta_path = os.path.join(directory, "metadata.json")
         emb_path = os.path.join(directory, "embeddings.npy")
 
+        payload = {
+            "embedder_model": self.embedder_model,
+            "dimension": self.dimension,
+            "chunks": self.chunks
+        }
+
         with open(meta_path, "w", encoding="utf-8") as wf:
-            json.dump(self.chunks, wf, indent=2, ensure_ascii=False)
+            json.dump(payload, wf, indent=2, ensure_ascii=False)
 
         if self.embeddings is not None:
             np.save(emb_path, self.embeddings)
 
     def load(self, directory: str):
-        """Loads vector store index from disk."""
+        """Loads vector store index and verifies metadata."""
         meta_path = os.path.join(directory, "metadata.json")
         emb_path = os.path.join(directory, "embeddings.npy")
 
         if os.path.exists(meta_path):
             with open(meta_path, "r", encoding="utf-8") as rf:
-                self.chunks = json.load(rf)
+                data = json.load(rf)
+                if isinstance(data, dict) and "chunks" in data:
+                    self.chunks = data["chunks"]
+                    self.embedder_model = data.get("embedder_model", self.embedder_model)
+                    self.dimension = data.get("dimension", self.dimension)
+                elif isinstance(data, list):
+                    self.chunks = data
 
         if os.path.exists(emb_path):
             self.embeddings = np.load(emb_path)
+            if self.embeddings is not None and self.embeddings.shape[1] != self.dimension:
+                logger.warning(f"Loaded index dimension {self.embeddings.shape[1]} differs from expected {self.dimension}")
 
         if self.chunks:
             self._build_bm25_index()
