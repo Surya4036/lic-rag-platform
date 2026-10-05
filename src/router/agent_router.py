@@ -352,19 +352,18 @@ class LICPolicyAgentRouter:
                 client = genai.Client(vertexai=True, project=os.environ.get("GCP_PROJECT_ID"), location="us-central1")
 
             if client:
-                for model_name in ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
-                    try:
-                        response = client.models.generate_content(
-                            model=model_name,
-                            contents=prompt,
-                            config=genai_config
-                        )
-                        if response and response.text:
-                            logger.info(f"Successfully generated answer with model {model_name}")
-                            return response.text.strip()
-                    except Exception as e:
-                        logger.warning(f"Gemini LLM error with model {model_name}: {e}")
-                        continue
+                model_name = "gemini-2.5-flash-lite"
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=genai_config
+                    )
+                    if response and response.text:
+                        logger.info(f"Successfully generated answer with model {model_name}")
+                        return response.text.strip()
+                except Exception as e:
+                    logger.warning(f"Gemini LLM error with model {model_name}: {e}")
         except Exception as e:
             logger.error(f"Gemini synthesis error: {e}")
 
