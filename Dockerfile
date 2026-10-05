@@ -13,8 +13,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY app/ ./app/
 COPY data/ ./data/
+COPY start.sh .
 
-EXPOSE 8000 8501
+RUN chmod +x start.sh
 
-ENV PORT=8000
-CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
+EXPOSE 8000 8080 8501
+
+ENV PORT=8080
+CMD ["/bin/bash", "./start.sh"]
