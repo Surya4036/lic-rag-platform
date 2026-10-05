@@ -25,10 +25,11 @@ A production-ready Enterprise-Grade AI Assistant and Multi-Modal RAG Platform fo
 - **[Ticket 9: FastAPI Backend REST Server](issues/009-fastapi-backend.md)**: Implemented production REST API server (`app/main.py`) exposing `/health`, `POST /api/v1/query` (Agentic RAG Router), `POST /api/v1/calculate` (Deterministic Payout Engine), and `GET /api/v1/policies`. Verified with unit tests `tests/test_fastapi.py`.
 - **[Ticket 10: Streamlit Frontend UI](issues/010-streamlit-ui.md)**: Implemented interactive Streamlit UI (`app/ui.py`) with multi-turn chatbot, collapsible source citations, sidebar payout calculator with metric cards, and policy comparison matrix. Verified with syntax compilation test `tests/test_ui.py`.
 - **[Ticket 11: Docker Containerization & Cloud Run Deployment Setup](issues/011-docker-deployment.md)**: Authored production multi-stage `Dockerfile` and `requirements.txt` locking dependencies for Cloud Run serverless container deployment.
+- **[Ticket 12: CI/CD Pipeline & Keyless GCP Cloud Run Deployment](issues/012-cicd-cloud-run.md)**: Configured GitHub Actions workflow (`.github/workflows/deploy.yml`) with keyless Workload Identity Federation (WIF) OIDC authentication, automated Pytest execution, Terraform IaC apply, and Cloud Run service deployment (`asia-south1`). Enabled native Vertex AI Application Default Credentials (ADC) in `src/embeddings/embedder.py`.
 
 ## Open Tickets (Frontier)
 
-- *All planned core system tickets (Tickets 1 to 11) completed! Ready for cloud deployment command execution.*
+- *All tickets (Tickets 1 to 12) completed! Platform is live with automated CI/CD deployment on GCP Cloud Run.*
 
 ## Not yet specified
 - **Frontend Framework:** Streamlit vs Next.js vs FastAPI + React for UI.
