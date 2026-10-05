@@ -1,0 +1,5 @@
+project_id         = "your-gcp-project-id"
+region             = "asia-south1"
+environment        = "prod"
+billing_account_id = "012345-6789AB-CDEF01"
+alert_email        = "your-email@domain.com"
