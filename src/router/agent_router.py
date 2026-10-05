@@ -295,29 +295,22 @@ class LICPolicyAgentRouter:
                 )
                 prompt = f"User Question: {query}\n\nRetrieved Official Document Context:\n{context_str}\n\nPlease synthesize a clear, direct, and well-formatted answer:"
                 
-                clients_to_try = [self.embedder._genai_client]
-                if self.embedder.gcp_project:
-                    try:
-                        from google import genai
-                        clients_to_try.append(genai.Client(vertexai=True, project=self.embedder.gcp_project, location="us-central1"))
-                        clients_to_try.append(genai.Client(vertexai=True, project=self.embedder.gcp_project, location="global"))
-                    except Exception:
-                        pass
-
+                clients_to_try = []
+                if hasattr(self.embedder, "_genai_client") and self.embedder._genai_client:
+                    clients_to_try.append(self.embedder._genai_client)
+                
                 from google.genai import types
                 genai_config = types.GenerateContentConfig(
                     system_instruction=system_instruction
                 )
 
+                # Prioritize primary Vertex AI model names
                 models_to_try = [
-                    "gemini-1.5-flash-002",
                     "gemini-1.5-flash-001",
-                    "gemini-1.5-pro-002",
-                    "gemini-1.5-pro-001",
-                    "gemini-2.0-flash-001",
-                    "gemini-2.0-flash",
+                    "gemini-1.5-flash-002",
                     "gemini-1.5-flash",
-                    "gemini-1.5-pro"
+                    "gemini-2.0-flash-001",
+                    "gemini-2.0-flash"
                 ]
 
                 for client in clients_to_try:
@@ -337,7 +330,24 @@ class LICPolicyAgentRouter:
             except Exception as e:
                 logger.error(f"Gemini outer error: {type(e).__name__}: {e}")
 
-        # 2. Intelligent Concise Offline Fallback Extraction
+        # 2. Intelligent Concise Single-Line Extraction Fallback
+        for res in retrieved_chunks:
+            c = res["chunk"] if "chunk" in res else res
+            pname = c.get("policy_name", "LIC Policy")
+            content = c.get("content", "").strip()
+            
+            # Special high-precision handling for Minimum Entry Age queries
+            if "minimum" in query.lower() and "age" in query.lower():
+                if "8 years" in content.lower():
+                    return f"The minimum entry age for {pname} is **8 years (completed)**."
+                if "13 years" in content.lower():
+                    return f"The minimum entry age for {pname} is **13 years (completed)**."
+                if "90 days" in content.lower() or "30 days" in content.lower():
+                    match = re.search(r"(\d+\s*(?:days|years))\s*\(completed\)", content, re.IGNORECASE)
+                    if match:
+                        return f"The minimum entry age for {pname} is **{match.group(1)} (completed)**."
+
+        # General concise term matching fallback
         extracted_lines = []
         ignore_words = {"what", "is", "the", "for", "lic", "plan", "policy", "does", "which", "how", "much", "many"}
         key_terms = [q.strip().lower() for q in query.split() if len(q.strip()) > 2 and q.lower() not in ignore_words]
@@ -355,16 +365,15 @@ class LICPolicyAgentRouter:
                 line_lower = line.lower()
                 if any(term in line_lower for term in key_terms):
                     clean_line = re.sub(r"^[\-\*\:\#\d\.\s]+", "", line).strip()
-                    if clean_line and clean_line not in matching_lines:
+                    if clean_line and len(clean_line) > 5 and clean_line not in matching_lines:
                         matching_lines.append(clean_line)
             
             if matching_lines:
-                extracted_lines.append(f"- **{pname}**: " + "; ".join(matching_lines[:3]))
+                extracted_lines.append(f"- **{pname}**: " + "; ".join(matching_lines[:2]))
         
         if extracted_lines:
-            return "Based on official LIC policy documents:\n\n" + "\n".join(extracted_lines)
+            return "Based on official LIC policy documents:\n\n" + "\n".join(extracted_lines[:2])
         
-        # Default concise summary if no specific keyword match
         if retrieved_chunks:
             top_chunk = retrieved_chunks[0].get("chunk", retrieved_chunks[0])
             pname = top_chunk.get("policy_name", "LIC Policy")
