@@ -10,6 +10,11 @@ from src.embeddings.embedder import PolicyEmbedder
 from src.vectorstore.store import VectorStore
 from src.tools.math_tool import calculate_maturity_benefit
 
+try:
+    from src.vectorstore.pgvector_store import PGVectorStore
+except ImportError:
+    PGVectorStore = None
+
 class QueryIntent(Enum):
     CALCULATION = "CALCULATION"
     COMPARISON = "COMPARISON"
@@ -25,12 +30,35 @@ class LICPolicyAgentRouter:
     def __init__(self, vector_store_dir: Optional[str] = None):
         self.embedder = PolicyEmbedder()
         self.vector_store = VectorStore()
+        self.pg_store = PGVectorStore() if PGVectorStore else None
         
         if vector_store_dir is None:
             vector_store_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "vector_store")
             
         if os.path.exists(vector_store_dir):
             self.vector_store.load(vector_store_dir)
+
+    def _retrieve_chunks(
+        self,
+        query: str,
+        q_vec: List[float],
+        top_k: int = 4,
+        policy_uin_filter: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Retrieves top matching policy chunks using Cloud SQL pgvector search with local hybrid fallback."""
+        retrieved = []
+        if self.pg_store:
+            try:
+                pg_results = self.pg_store.search(q_vec, top_k=top_k, policy_uin_filter=policy_uin_filter)
+                if pg_results:
+                    retrieved = pg_results
+            except Exception as e:
+                logger.warning(f"PGVector retrieval attempt failed, using local hybrid search: {e}")
+
+        if not retrieved:
+            retrieved = self.vector_store.hybrid_search(query, q_vec, top_k=top_k, policy_uin_filter=policy_uin_filter)
+
+        return retrieved
 
     def classify_intent(self, query: str) -> QueryIntent:
         q_lower = query.lower()
@@ -206,10 +234,10 @@ class LICPolicyAgentRouter:
             if mentioned_uins:
                 per_policy_k = max(2, 4 // len(mentioned_uins))
                 for uin in mentioned_uins:
-                    policy_res = self.vector_store.hybrid_search(query, q_vec, top_k=per_policy_k, policy_uin_filter=uin)
+                    policy_res = self._retrieve_chunks(query, q_vec, top_k=per_policy_k, policy_uin_filter=uin)
                     retrieved.extend(policy_res)
             else:
-                retrieved = self.vector_store.hybrid_search(query, q_vec, top_k=4)
+                retrieved = self._retrieve_chunks(query, q_vec, top_k=4)
 
             citations = []
             chunk_sections = []
@@ -246,10 +274,10 @@ class LICPolicyAgentRouter:
             retrieved = []
             per_policy_k = max(4, 5 // len(mentioned_uins))
             for uin in mentioned_uins:
-                policy_res = self.vector_store.hybrid_search(query, q_vec, top_k=per_policy_k, policy_uin_filter=uin)
+                policy_res = self._retrieve_chunks(query, q_vec, top_k=per_policy_k, policy_uin_filter=uin)
                 retrieved.extend(policy_res)
         else:
-            retrieved = self.vector_store.hybrid_search(query, q_vec, top_k=4)
+            retrieved = self._retrieve_chunks(query, q_vec, top_k=4)
 
         citations = []
         for res in retrieved:

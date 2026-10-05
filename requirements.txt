@@ -10,3 +10,5 @@ httpx==0.28.1
 streamlit==1.41.1
 requests==2.32.3
 playwright==1.49.1
+psycopg2-binary>=2.9.9
+pgvector>=0.2.0
