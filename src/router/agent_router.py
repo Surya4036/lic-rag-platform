@@ -301,20 +301,27 @@ class LICPolicyAgentRouter:
                     except Exception:
                         pass
 
+                from google.genai import types
+                genai_config = types.GenerateContentConfig(
+                    system_instruction=system_instruction
+                )
+
                 for client in clients_to_try:
                     for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro"]:
                         try:
                             response = client.models.generate_content(
                                 model=model_name,
                                 contents=prompt,
-                                config={"system_instruction": system_instruction}
+                                config=genai_config
                             )
                             if response and response.text:
+                                logger.info(f"Successfully generated answer with model {model_name}")
                                 return response.text.strip()
-                        except Exception:
+                        except Exception as e:
+                            logger.error(f"Gemini LLM error with model {model_name}: {type(e).__name__}: {e}")
                             continue
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Gemini outer error: {type(e).__name__}: {e}")
 
         # 2. Intelligent Offline Fallback Extraction
         extracted_points = []
