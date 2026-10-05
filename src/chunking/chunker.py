@@ -40,7 +40,7 @@ class MarkdownSemanticChunker:
         policy_uin = uin_match.group(0) if uin_match else "UNKNOWN_UIN"
 
         # Attempt to extract clean policy name
-        name_match = re.search(r"(LIC(?:’|')?s?\s+[A-Za-z0-9\s\-–]+?(?:Plan|Umang|Shree|Money Back)[A-Za-z0-9\s\-–]*?)(?:\(|\n|UIN|$)", text, re.IGNORECASE)
+        name_match = re.search(r"(LIC(?:’|')?s?\s+[A-Za-z0-9\s\-–]+?(?:Plan|Umang|Shree|Money Back|Labh|Utsav|Amritbaal|Pension|Anand|Akshay|Bima|Endowment)[A-Za-z0-9\s\-–]*?)(?:\(|\n|UIN|$)", text, re.IGNORECASE)
         if name_match:
             policy_name = self.clean_text(name_match.group(1)).replace("**", "").replace("#", "").strip()
         else:

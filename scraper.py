@@ -2,7 +2,7 @@ import os
 import asyncio
 from playwright.async_api import async_playwright
 
-DOWNLOAD_DIR = r"D:\Projects\LIC RAG\lic_pdf_brochures"
+DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "data", "raw_pdfs")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 # Verified, direct PDF document endpoints on LIC's server

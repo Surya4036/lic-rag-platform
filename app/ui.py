@@ -58,7 +58,15 @@ st.sidebar.markdown("Deterministic Python Math Engine")
 
 calc_plan = st.sidebar.selectbox(
     "Select Plan",
-    ["LIC Jeevan Umang", "LIC Bima Shree", "LIC New Money Back Plan 20 Years"]
+    [
+        "LIC Jeevan Umang",
+        "LIC Bima Shree",
+        "LIC New Money Back Plan 20 Years",
+        "LIC Jeevan Labh",
+        "LIC Jeevan Utsav",
+        "LIC Amritbaal",
+        "LIC New Pension Plus"
+    ]
 )
 calc_sa = st.sidebar.number_input("Sum Assured (₹)", min_value=100000, max_value=10000000, value=500000, step=50000)
 calc_term = st.sidebar.slider("Policy Term (Years)", min_value=10, max_value=35, value=25)

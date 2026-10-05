@@ -17,8 +17,18 @@ def test_math_tool_calculation():
     
     assert "error" not in result
     assert result["basic_sum_assured"] == 500000
-    assert result["total_estimated_maturity_benefit"] > 500000
+    assert result["total_estimated_maturity_benefit"] == 1120000.0  # 500k + (500*48*25) + (500*40) = 500k + 600k + 20k = 1,120,000
     assert "breakdown" in result
+
+def test_calc_param_extraction_no_collision():
+    router = LICPolicyAgentRouter()
+    
+    # Test query where age comes FIRST before sum assured
+    params = router._extract_calc_params("Calculate maturity for age 30, 20 year term, sum assured 5 lakh in Jeevan Umang")
+    assert params["age"] == 30
+    assert params["term"] == 20
+    assert params["sum_assured"] == 500000.0
+    assert params["policy_name"] == "LIC Jeevan Umang"
 
 def test_intent_classification():
     router = LICPolicyAgentRouter()
@@ -35,12 +45,18 @@ def test_intent_classification():
     intent_out = router.classify_intent("How do I bake a chocolate cake?")
     assert intent_out == QueryIntent.OUT_OF_SCOPE
 
+    # Test scope classification boundary cases ("determine" contains "term", "public" contains "lic")
+    intent_determine_cake = router.classify_intent("How to determine the public policy on baking cakes?")
+    assert intent_determine_cake == QueryIntent.OUT_OF_SCOPE
+
 def test_router_execution_calculation():
     router = LICPolicyAgentRouter()
     response = router.process_query("Calculate payout for Jeevan Umang age 30 term 25 sum assured 500000")
     
     assert response["intent"] == QueryIntent.CALCULATION.value
-    assert "500" in response["answer"] or "Maturity" in response["answer"]
+    assert "Maturity Benefit Estimate for **LIC Jeevan Umang**" in response["answer"]
+    assert "500,000" in response["answer"]
+    assert "1,120,000" in response["answer"]
     assert response["tool_call_used"] is True
 
 def test_router_execution_policy_inquiry():
@@ -78,4 +94,3 @@ def test_comparison_targeted_retrieval():
     assert any("Jeevan Umang" in name for name in citation_names)
     assert any("Bima Shree" in name for name in citation_names)
     assert not any("Money Back" in name for name in citation_names)
-

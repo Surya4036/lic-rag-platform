@@ -13,6 +13,22 @@ BONUS_TABLES = {
     "LIC New Money Back Plan 20 Years": {
         "reversionary_bonus_per_1000_per_year": 42.0,
         "fab_per_1000": 35.0
+    },
+    "LIC Jeevan Labh": {
+        "reversionary_bonus_per_1000_per_year": 47.0,
+        "fab_per_1000": 45.0
+    },
+    "LIC Jeevan Utsav": {
+        "reversionary_bonus_per_1000_per_year": 40.0,
+        "fab_per_1000": 40.0
+    },
+    "LIC Amritbaal": {
+        "reversionary_bonus_per_1000_per_year": 80.0,
+        "fab_per_1000": 0.0
+    },
+    "LIC New Pension Plus": {
+        "reversionary_bonus_per_1000_per_year": 45.0,
+        "fab_per_1000": 30.0
     }
 }
 

@@ -35,67 +35,106 @@ class LICPolicyAgentRouter:
     def classify_intent(self, query: str) -> QueryIntent:
         q_lower = query.lower()
 
-        # Out-of-scope / Non-LIC insurance keywords check
+        # Out-of-scope / Non-LIC insurance keywords check with strict word boundaries
         non_lic_keywords = [
-            "cake", "recipe", "capital of", "weather", "car insurance", "health insurance",
-            "crypto", "python code", "bake", "stock", "stock price", "apple", "shares",
-            "movie", "football", "cricket", "flight", "hotel", "president", "bitcoin"
+            r"\bcakes?\b", r"\brecipes?\b", r"\bcapital\b", r"\bweather\b", r"\bcar\s*insurance\b", r"\bhealth\s*insurance\b",
+            r"\bcrypto\b", r"\bpython\b", r"\bbakes?\b", r"\bstocks?\b", r"\bshares?\b",
+            r"\bmovies?\b", r"\bfootball\b", r"\bcricket\b", r"\bflights?\b", r"\bhotels?\b", r"\bpresidents?\b", r"\bbitcoins?\b"
         ]
-        lic_policy_keywords = [
-            "lic", "jeevan", "bima", "money back", "sum assured", "maturity", "premium",
-            "policy", "rider", "uin", "term", "insurance", "death benefit", "survival benefit",
-            "grace period", "surrender", "loan", "nominee", "claim", "annuity", "endowment", "revival"
+        explicit_lic_keywords = [
+            r"\blic\b", r"\bjeevan\b", r"\bbima\b", r"\bmoney\s*back\b", r"\bsum\s*assured\b", r"\bmaturity\b", r"\bpremium\b",
+            r"\brider\b", r"\buin\b", r"\bdeath\s*benefit\b", r"\bsurvival\s*benefit\b",
+            r"\bgrace\s*period\b", r"\bsurrender\b", r"\bnominee\b", r"\bclaim\b", r"\bannuity\b", r"\bendowment\b", r"\brevival\b"
         ]
 
-        if any(kw in q_lower for kw in non_lic_keywords) and not any(kw in q_lower for kw in lic_policy_keywords):
+        # Check non-LIC domain triggers first
+        is_non_lic = any(re.search(pat, q_lower) for pat in non_lic_keywords)
+        is_explicit_lic = any(re.search(pat, q_lower) for pat in explicit_lic_keywords)
+
+        if is_non_lic and not is_explicit_lic:
             return QueryIntent.OUT_OF_SCOPE
 
         # Calculation keywords
         calc_keywords = ["calculate", "payout", "maturity benefit", "estimated maturity", "how much will i get", "bonus calculation"]
-        if any(kw in q_lower for kw in calc_keywords) and ("sum assured" in q_lower or "lakh" in q_lower or "500000" in q_lower or "200000" in q_lower or "term" in q_lower):
+        if any(kw in q_lower for kw in calc_keywords) and (any(re.search(p, q_lower) for p in [r"\bsum\s*assured\b", r"\blakh\b", r"\b500000\b", r"\b200000\b"]) or ("term" in q_lower and "age" in q_lower)):
             return QueryIntent.CALCULATION
 
         # Comparison keywords
         comp_keywords = ["compare", "vs", "versus", "difference between", "which is better"]
-        if any(kw in q_lower for kw in comp_keywords) and (any(kw in q_lower for kw in lic_policy_keywords) or "plan" in q_lower or "policy" in q_lower):
+        if any(kw in q_lower for kw in comp_keywords) and (is_explicit_lic or "plan" in q_lower or "policy" in q_lower):
             return QueryIntent.COMPARISON
 
-        # General policy inquiry fallback - require LIC / insurance domain context or policy concepts
-        if any(kw in q_lower for kw in lic_policy_keywords) or "plan" in q_lower or "benefit" in q_lower:
+        # General policy inquiry fallback - require explicit LIC domain context or policy concepts
+        if is_explicit_lic or "lic" in q_lower or "jeevan" in q_lower or "bima" in q_lower:
             return QueryIntent.POLICY_INQUIRY
 
         return QueryIntent.OUT_OF_SCOPE
 
     def _extract_calc_params(self, query: str) -> Dict[str, Any]:
-        """Extract policy name, sum assured, term, and entry age from user prompt."""
-        # Sum Assured extraction
-        sa_match = re.search(r"(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:lakh|l)?", query, re.IGNORECASE)
-        sa = 500000.0
-        if sa_match:
-            val_str = sa_match.group(1).replace(",", "")
-            val = float(val_str)
-            if "lakh" in query.lower() or "l" in sa_match.group(0).lower() and val < 100:
-                sa = val * 100000.0
-            elif val >= 50000:
-                sa = val
+        """Extract policy name, sum assured, term, and entry age cleanly from prompt without parameter collision."""
+        q_lower = query.lower()
 
-        # Term extraction
-        term_match = re.search(r"(\d+)\s*(?:years?|yr|term)", query, re.IGNORECASE)
-        term = int(term_match.group(1)) if term_match else 25
-
-        # Age extraction
-        age_match = re.search(r"age\s*(\d+)|(\d+)\s*years?\s*old", query, re.IGNORECASE)
+        # 1. Age extraction first (to avoid age numbers matching sum assured)
         age = 30
+        age_match = re.search(r"(?:age|aged)\s*(\d+)|(\d+)\s*(?:years?|yr|yrs)\s*old", q_lower)
         if age_match:
-            age_str = age_match.group(1) or age_match.group(2)
-            age = int(age_str)
+            a_str = age_match.group(1) or age_match.group(2)
+            if a_str:
+                age_val = int(a_str)
+                if 0 <= age_val <= 100:
+                    age = age_val
 
-        # Policy name extraction
+        # 2. Term extraction
+        term = 25
+        term_match = re.search(r"(?:term|duration|period)\s*(?:of\s*)?(\d+)|(\d+)\s*(?:years?|yr|yrs)\s*(?:term|duration|policy)", q_lower)
+        if term_match:
+            t_str = term_match.group(1) or term_match.group(2)
+            if t_str:
+                term_val = int(t_str)
+                if 5 <= term_val <= 100:
+                    term = term_val
+
+        # 3. Sum Assured extraction targeting explicit keywords or currency figures
+        sa = 500000.0
+        sa_patterns = [
+            r"(?:sum\s*assured|sa|cover)\s*(?:of\s*)?₹?\s*(\d+(?:,\d+)*(?:\.\d+)?)\s*(lakh|lakhs|l|cr|crore)?",
+            r"₹?\s*(\d+(?:,\d+)*(?:\.\d+)?)\s*(lakh|lakhs|l|cr|crore)\s*(?:sum\s*assured|sa|cover)?",
+            r"(?:₹|rs\.?)\s*(\d+(?:,\d+)*(?:\.\d+)?)"
+        ]
+        
+        for pat in sa_patterns:
+            m = re.search(pat, q_lower)
+            if m:
+                val_str = m.group(1).replace(",", "")
+                try:
+                    val = float(val_str)
+                    unit = m.group(2) if len(m.groups()) >= 2 else ""
+                    if unit in ["lakh", "lakhs", "l"]:
+                        sa = val * 100000.0
+                    elif unit in ["cr", "crore"]:
+                        sa = val * 10000000.0
+                    elif val >= 50000:
+                        sa = val
+                    elif val < 100 and ("lakh" in q_lower or "l" in q_lower):
+                        sa = val * 100000.0
+                    break
+                except ValueError:
+                    pass
+
+        # 4. Policy name extraction
         policy_name = "LIC Jeevan Umang"
-        if "bima shree" in query.lower():
+        if "bima shree" in q_lower:
             policy_name = "LIC Bima Shree"
-        elif "money back" in query.lower():
+        elif "money back" in q_lower:
             policy_name = "LIC New Money Back Plan 20 Years"
+        elif "labh" in q_lower:
+            policy_name = "LIC Jeevan Labh"
+        elif "utsav" in q_lower:
+            policy_name = "LIC Jeevan Utsav"
+        elif "amritbaal" in q_lower or "amrit" in q_lower:
+            policy_name = "LIC Amritbaal"
+        elif "pension" in q_lower:
+            policy_name = "LIC New Pension Plus"
 
         return {
             "policy_name": policy_name,
@@ -112,7 +151,11 @@ class LICPolicyAgentRouter:
         policy_patterns = {
             "512N312V03": [r"\bjeevan\s*umang\b", r"\bumang\b", r"512n312v03", r"\b745\b"],
             "512N316V03": [r"\bbima\s*shree\b", r"\bbima\s*sri\b", r"\bshree\b", r"512n316v03"],
-            "512N280V03": [r"\bmoney\s*back\b", r"512n280v03"]
+            "512N280V03": [r"\bmoney\s*back\b", r"512n280v03"],
+            "512N304V02": [r"\bjeevan\s*labh\b", r"\blabh\b", r"512n304v02"],
+            "512N363V01": [r"\bjeevan\s*utsav\b", r"\butsav\b", r"512n363v01"],
+            "512N365V01": [r"\bamritbaal\b", r"\bamrit\s*baal\b", r"512n365v01"],
+            "512N347V01": [r"\bnew\s*pension\s*plus\b", r"\bpension\s*plus\b", r"512n347v01"]
         }
         
         for uin, patterns in policy_patterns.items():
