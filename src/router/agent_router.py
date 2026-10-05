@@ -152,10 +152,10 @@ class LICPolicyAgentRouter:
             "512N312V03": [r"\bjeevan\s*umang\b", r"\bumang\b", r"512n312v03", r"\b745\b"],
             "512N316V03": [r"\bbima\s*shree\b", r"\bbima\s*sri\b", r"\bshree\b", r"512n316v03"],
             "512N280V03": [r"\bmoney\s*back\b", r"512n280v03"],
-            "512N304V02": [r"\bjeevan\s*labh\b", r"\blabh\b", r"512n304v02"],
+            "512N304V03": [r"\bjeevan\s*labh\b", r"\blabh\b", r"512n304v02", r"512n304v03"],
             "512N363V01": [r"\bjeevan\s*utsav\b", r"\butsav\b", r"512n363v01"],
             "512N365V01": [r"\bamritbaal\b", r"\bamrit\s*baal\b", r"512n365v01"],
-            "512N347V01": [r"\bnew\s*pension\s*plus\b", r"\bpension\s*plus\b", r"512n347v01"]
+            "512N347V01": [r"\bnew\s*pension\s*plus\b", r"\bpension\s*plus\b", r"\bpension\b", r"512n347v01"]
         }
         
         for uin, patterns in policy_patterns.items():
@@ -352,7 +352,7 @@ class LICPolicyAgentRouter:
                 client = genai.Client(vertexai=True, project=os.environ.get("GCP_PROJECT_ID"), location="us-central1")
 
             if client:
-                for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+                for model_name in ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
                     try:
                         response = client.models.generate_content(
                             model=model_name,
@@ -368,7 +368,7 @@ class LICPolicyAgentRouter:
         except Exception as e:
             logger.error(f"Gemini synthesis error: {e}")
 
-        # 2. Intelligent Concise Single-Line Extraction Fallback
+        # 2. Intelligent Concise Extraction Fallback
         for res in retrieved_chunks:
             c = res["chunk"] if "chunk" in res else res
             pname = c.get("policy_name", "LIC Policy")
@@ -387,7 +387,7 @@ class LICPolicyAgentRouter:
 
         # General concise term matching fallback
         extracted_lines = []
-        ignore_words = {"what", "is", "the", "for", "lic", "plan", "policy", "does", "which", "how", "much", "many"}
+        ignore_words = {"what", "is", "are", "the", "for", "lic", "plan", "policy", "does", "which", "how", "much", "many", "under", "defined", "option", "choice", "choices"}
         key_terms = [q.strip().lower() for q in query.split() if len(q.strip()) > 2 and q.lower() not in ignore_words]
         
         for res in retrieved_chunks:
@@ -397,13 +397,13 @@ class LICPolicyAgentRouter:
             if not content:
                 continue
             
-            clean_lines = [line.strip() for line in content.split("\n") if line.strip()]
+            clean_lines = [line.strip() for line in content.split("\n") if line.strip() and not line.strip().endswith(".pdf")]
             matching_lines = []
             for line in clean_lines:
                 line_lower = line.lower()
                 if any(term in line_lower for term in key_terms):
                     clean_line = re.sub(r"^[\-\*\:\#\d\.\s]+", "", line).strip()
-                    if clean_line and len(clean_line) > 5 and clean_line not in matching_lines:
+                    if clean_line and len(clean_line) > 10 and clean_line not in matching_lines:
                         matching_lines.append(clean_line)
             
             if matching_lines:
@@ -415,7 +415,8 @@ class LICPolicyAgentRouter:
         if retrieved_chunks:
             top_chunk = retrieved_chunks[0].get("chunk", retrieved_chunks[0])
             pname = top_chunk.get("policy_name", "LIC Policy")
-            first_text = self._format_clean_markdown(top_chunk.get("content", "").strip()).split("\n")[0]
+            content_lines = [l.strip() for l in top_chunk.get("content", "").split("\n") if l.strip() and not l.strip().endswith(".pdf")]
+            first_text = content_lines[0] if content_lines else "Refer to official policy documentation."
             return f"**{pname}**: {first_text}"
 
         return f"Based on official LIC policy documents for '{query}': No relevant details found."

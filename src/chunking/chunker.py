@@ -37,14 +37,39 @@ class MarkdownSemanticChunker:
     def extract_policy_metadata(self, text: str, default_name: str) -> Dict[str, str]:
         """Extract policy UIN and canonical policy name from text."""
         uin_match = re.search(r"512N\d{3}V\d{2}", text)
-        policy_uin = uin_match.group(0) if uin_match else "UNKNOWN_UIN"
+        policy_uin = uin_match.group(0) if uin_match else None
+
+        # Canonical map for fallback by filename / text
+        canonical_map = [
+            ("umang", "512N312V03", "LIC Jeevan Umang"),
+            ("bima shree", "512N316V03", "LIC Bima Shree"),
+            ("money back", "512N280V03", "LIC New Money Back Plan 20 Years"),
+            ("labh", "512N304V03", "LIC Jeevan Labh"),
+            ("utsav", "512N363V01", "LIC Jeevan Utsav"),
+            ("amritbaal", "512N365V01", "LIC Amritbaal"),
+            ("pension", "512N347V01", "LIC New Pension Plus")
+        ]
+
+        comb_text = (text[:300] + " " + default_name).lower()
+        
+        fallback_uin = "UNKNOWN_UIN"
+        fallback_name = None
+        for key, u, name in canonical_map:
+            if key in comb_text:
+                fallback_uin = u
+                fallback_name = name
+                break
+
+        if not policy_uin:
+            policy_uin = fallback_uin
 
         # Attempt to extract clean policy name
         name_match = re.search(r"(LIC(?:’|')?s?\s+[A-Za-z0-9\s\-–]+?(?:Plan|Umang|Shree|Money Back|Labh|Utsav|Amritbaal|Pension|Anand|Akshay|Bima|Endowment)[A-Za-z0-9\s\-–]*?)(?:\(|\n|UIN|$)", text, re.IGNORECASE)
         if name_match:
             policy_name = self.clean_text(name_match.group(1)).replace("**", "").replace("#", "").strip()
+        elif fallback_name:
+            policy_name = fallback_name
         else:
-            # Fallback based on file name
             clean_name = os.path.splitext(os.path.basename(default_name))[0]
             clean_name = re.sub(r"^\d+\s*", "", clean_name)
             policy_name = clean_name.replace("_", " ").strip()
