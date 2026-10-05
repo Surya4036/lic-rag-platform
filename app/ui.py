@@ -28,11 +28,11 @@ local_router = get_local_router()
 def query_backend(prompt: str) -> dict:
     """Send query to FastAPI backend server with local fallback."""
     try:
-        res = requests.post(f"{API_URL}/api/v1/query", json={"query": prompt}, timeout=5)
+        res = requests.post(f"{API_URL}/api/v1/query", json={"query": prompt}, timeout=30)
         if res.status_code == 200:
             return res.json()
-    except Exception:
-        pass
+    except Exception as e:
+        print("FastAPI query error:", e)
     # Fallback to direct python execution
     return local_router.process_query(prompt)
 
@@ -45,11 +45,11 @@ def calculate_backend(policy_name: str, sum_assured: float, term: int, age: int)
             "term": term,
             "age": age
         }
-        res = requests.post(f"{API_URL}/api/v1/calculate", json=payload, timeout=5)
+        res = requests.post(f"{API_URL}/api/v1/calculate", json=payload, timeout=30)
         if res.status_code == 200:
             return res.json()
-    except Exception:
-        pass
+    except Exception as e:
+        print("FastAPI calculate error:", e)
     return calculate_maturity_benefit(policy_name=policy_name, sum_assured=sum_assured, term=term, age=age)
 
 # Sidebar - Math Payout Calculator Tool
