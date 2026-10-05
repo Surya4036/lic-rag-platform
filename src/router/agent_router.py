@@ -288,23 +288,33 @@ class LICPolicyAgentRouter:
                 system_instruction = (
                     "You are an expert AI LIC Policy Advisor. Answer the user's question directly, concisely, and accurately "
                     "using ONLY the provided official LIC policy context documents below. "
-                    "Do NOT copy large blocks of irrelevant text, rider terms, or fee tables unless directly requested. "
-                    "Format key facts as bullet points or clean markdown tables where applicable. "
+                    "Do NOT copy large blocks of raw text, rider terms, or fee tables unless directly requested. "
+                    "Format key facts as clear bullet points or markdown tables. "
                     "If the answer is not contained in the context, state clearly that the provided policy documents do not specify this detail."
                 )
                 prompt = f"User Question: {query}\n\nRetrieved Official Document Context:\n{context_str}\n\nPlease synthesize a clear, direct, and well-formatted answer:"
                 
-                for model_name in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]:
+                clients_to_try = [self.embedder._genai_client]
+                if self.embedder.gcp_project:
                     try:
-                        response = self.embedder._genai_client.models.generate_content(
-                            model=model_name,
-                            contents=prompt,
-                            config={"system_instruction": system_instruction}
-                        )
-                        if response and response.text:
-                            return response.text.strip()
+                        from google import genai
+                        clients_to_try.append(genai.Client(vertexai=True, project=self.embedder.gcp_project, location="us-central1"))
+                        clients_to_try.append(genai.Client(vertexai=True, project=self.embedder.gcp_project, location="global"))
                     except Exception:
-                        continue
+                        pass
+
+                for client in clients_to_try:
+                    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro"]:
+                        try:
+                            response = client.models.generate_content(
+                                model=model_name,
+                                contents=prompt,
+                                config={"system_instruction": system_instruction}
+                            )
+                            if response and response.text:
+                                return response.text.strip()
+                        except Exception:
+                            continue
             except Exception:
                 pass
 
