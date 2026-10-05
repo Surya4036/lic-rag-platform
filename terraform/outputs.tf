@@ -15,7 +15,7 @@ output "db_connection_name" {
 
 output "db_public_ip" {
   description = "Cloud SQL public IP address"
-  value       = google_sql_database_instance.postgres.public_ip_address
+  value       = google_sql_database_instance.postgres.first_ip_address
 }
 
 output "db_user" {
