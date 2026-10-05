@@ -319,39 +319,22 @@ class LICPolicyAgentRouter:
                 pass
 
         # 2. Intelligent Offline Fallback Extraction
-        q_terms = set(re.findall(r"\w+", query.lower())) - {"what", "is", "the", "for", "in", "of", "and", "or", "a", "an", "to", "lic"}
-        
         extracted_points = []
         for res in retrieved_chunks:
             c = res["chunk"] if "chunk" in res else res
             pname = c.get("policy_name", "LIC Policy")
             hdr = c.get("header_path", "General")
-            lines = c.get("content", "").split("\n")
+            content = c.get("content", "").strip()
             
-            hdr_match = any(t in hdr.lower() for t in q_terms if t not in ["policy", "plan", "uin"])
-            
-            relevant_lines = []
-            for line in lines:
-                line_str = line.strip()
-                if not line_str or line_str.startswith("<!--"):
-                    continue
+            if not content:
+                continue
                 
-                if line_str.startswith("|") or hdr_match:
-                    relevant_lines.append(line_str)
-                    continue
-                    
-                line_words = set(re.findall(r"\w+", line_str.lower()))
-                if len(line_words & q_terms) >= 1 or any(term in line_str.lower() for term in ["survival", "benefit", "maturity", "payout", "eligibility", "schedule", "percentage"]):
-                    if not line_str.isdigit() and len(line_str) > 8:
-                        relevant_lines.append(line_str)
-            
-            if relevant_lines:
-                clean_section_text = self._format_clean_markdown("\n".join(relevant_lines[:12]))
-                extracted_points.append(f"### **{pname}** (*{hdr}*)\n{clean_section_text}")
+            clean_section_text = self._format_clean_markdown(content)
+            extracted_points.append(f"### **{pname}** (*{hdr}*)\n{clean_section_text}")
         
         if extracted_points:
             return "Based on official LIC policy documents, here are the relevant details:\n\n" + "\n\n---\n\n".join(extracted_points)
         
-        return f"Based on official LIC policy documents for '{query}':\n\n" + "\n\n".join([f"**[{res['chunk']['policy_name']}]** (*{res['chunk']['header_path']}*):\n{self._format_clean_markdown(res['chunk']['content'][:300])}..." for res in retrieved_chunks])
+        return f"Based on official LIC policy documents for '{query}':\n\nNo relevant details found."
 
 
