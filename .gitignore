@@ -35,6 +35,7 @@ htmlcov/
 *.key
 *.json
 !data/chunks/parsed_chunks.json
+!data/vector_store/metadata.json
 
 # Terraform
 .terraform/

@@ -14,12 +14,18 @@ class PolicyEmbedder:
         self.dimension = dimension
         self.force_local = force_local
         self.api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        self.gcp_project = os.environ.get("GCP_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT")
+        self.gcp_location = os.environ.get("GCP_REGION", "asia-south1")
         self._genai_client = None
 
-        if self.api_key and not self.force_local:
+        if not self.force_local:
             try:
                 from google import genai
-                self._genai_client = genai.Client(api_key=self.api_key)
+                if self.api_key:
+                    self._genai_client = genai.Client(api_key=self.api_key)
+                elif self.gcp_project:
+                    # Vertex AI mode using Application Default Credentials (ADC)
+                    self._genai_client = genai.Client(vertexai=True, project=self.gcp_project, location=self.gcp_location)
             except Exception:
                 self._genai_client = None
 
