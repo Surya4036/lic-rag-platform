@@ -7,11 +7,10 @@ terraform {
     }
   }
 
-  # Uncomment once state bucket is created
-  # backend "gcs" {
-  #   bucket = "lic-rag-tfstate-prod"
-  #   prefix = "terraform/state"
-  # }
+  backend "gcs" {
+    bucket = "project-375bcd63-tfstate-prod"
+    prefix = "terraform/state"
+  }
 }
 
 provider "google" {
