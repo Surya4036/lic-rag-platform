@@ -13,11 +13,6 @@ resource "google_sql_database_instance" "postgres" {
       start_time = "03:00"
     }
 
-    database_flags {
-      name  = "cloudsql.enable_pgvector"
-      value = "on"
-    }
-
     ip_configuration {
       ipv4_enabled = true
     }
